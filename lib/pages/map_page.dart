@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:eco_smart/components/main_drawer.dart';
 import 'package:eco_smart/core/constants.dart';
+import 'package:eco_smart/models/request.dart';
+import 'package:eco_smart/models/response.dart';
+import 'package:eco_smart/services/request_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/material.dart';
@@ -24,54 +27,51 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
-    _loadMarkers();
+    _loadPoints();
   }
 
-  Future<void> _loadMarkers() async {
-    final markerIcon1 = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/garbage-type-icons/default.png',
-    );
-    final markerIcon2 = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/garbage-type-icons/glass.png',
-    );
-    final markerIcon3 = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/garbage-type-icons/eletronic.png',
-    );
+  Future<void> _loadPoints() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
 
-    setState(() {
-      _markers = [
-        Marker(
-          markerId: const MarkerId('ponto1'),
-          position: const LatLng(-23.55052, -46.63331),
-          infoWindow: const InfoWindow(
-            title: 'Ponto de Coleta 1',
-            snippet: 'Coleta de plásticos e papéis',
-          ),
-          icon: markerIcon1,
-        ),
-        Marker(
-          markerId: const MarkerId('ponto2'),
-          position: const LatLng(-23.55103, -46.64048),
-          infoWindow: const InfoWindow(
-            title: 'Ponto de Coleta 2',
-            snippet: 'Coleta de metais e vidros',
-          ),
-          icon: markerIcon2,
-        ),
-        Marker(
-          markerId: const MarkerId('ponto3'),
-          position: const LatLng(-23.55439, -46.62970),
-          infoWindow: const InfoWindow(
-            title: 'Ponto de Coleta 3',
-            snippet: 'Coleta de resíduos eletrônicos',
-          ),
-          icon: markerIcon3,
-        ),
-      ];
-    });
+      Request request = Request(
+        method: 'GET',
+        route: 'collection-points',
+      );
+      Response response = await RequestService().sendRequest(request);
+      if (response.status == 200) {
+        List<dynamic> points = response.data;
+        var markers = points.map((point) async {
+          return Marker(
+            markerId: MarkerId(point['id'].toString()),
+            position: LatLng(point['position']['latitude'], point['position']['longitude']),
+            infoWindow: InfoWindow(
+              title: point['title'],
+              snippet: point['description'],
+            ),
+            icon: await BitmapDescriptor.fromAssetImage(
+              const ImageConfiguration(size: Size(48, 48)),
+              point['icon']
+            ),
+          );
+        }).toList();
+
+        // Wait for all markers to be created
+        _markers = await Future.wait(markers);
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e, stack) {
+      print(e);
+      print(stack);
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _onMapCreated(GoogleMapController controller) {
